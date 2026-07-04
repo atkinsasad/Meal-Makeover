@@ -1,0 +1,187 @@
+import { useState } from "react";
+
+const EXAMPLES = [
+  "Mashed potatoes and gravy",
+  "Spaghetti bolognese",
+  "Pancakes with maple syrup",
+  "White rice stir fry",
+  "Pepperoni pizza",
+];
+
+const RESTRICTIONS = [
+  { id: "gluten-free", label: "🌾 Gluten-free" },
+  { id: "dairy-free", label: "🥛 Dairy-free" },
+  { id: "vegetarian", label: "🥦 Vegetarian" },
+  { id: "vegan", label: "🌱 Vegan" },
+  { id: "halal", label: "☪️ Halal" },
+  { id: "kosher", label: "✡️ Kosher" },
+];
+
+export default function MealMakeover() {
+  const [meal, setMeal] = useState("");
+  const [selected, setSelected] = useState([]);
+  const [result, setResult] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  function toggleRestriction(id) {
+    setSelected((prev) =>
+      prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id]
+    );
+  }
+
+  function buildPrompt() {
+    let prompt = `Meal: ${meal}`;
+    if (selected.length > 0) {
+      prompt += `\n\nDietary restrictions: ${selected.join(", ")}. All ingredient swaps MUST comply with these restrictions. Do not suggest any alternatives that violate them.`;
+    }
+    return prompt;
+  }
+
+  const system = `You are a warm, practical nutrition coach specializing in blood sugar management. Help people enjoy their favorite meals with lower glycemic impact.
+
+For the given meal:
+1. One sentence acknowledging what makes it appealing.
+2. Name the blood-sugar-spiking ingredients briefly.
+3. Suggest a revised version with specific lower-glycemic swaps (e.g. cauliflower mash instead of mashed potatoes, cauliflower rice instead of white rice, zucchini noodles instead of pasta, almond flour instead of white flour). Every swap must respect the user's dietary restrictions if provided. If no clear ingredient swap exists, recommend the "fiber first" eating order strategy: eat fiber-rich foods first, then fats and protein, and save the carbs for last — explain how this reduces the blood sugar spike without changing ingredients.
+4. Two quick practical tips (portion, cooking method, or pairing).
+5. One short encouraging closing line.
+
+Use emoji section headers. Be specific and practical. Never shame the original choice. Keep the total response under 340 words.`;
+
+  async function getMakeover() {
+    if (!meal.trim()) {
+      setError("Please enter a meal first.");
+      return;
+    }
+    setError("");
+    setResult("");
+    setLoading(true);
+
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "anthropic-dangerous-direct-browser-calls": "true",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 1000,
+          system,
+          messages: [{ role: "user", content: buildPrompt() }],
+        }),
+      });
+
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e?.error?.message || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      const text = (data.content || []).map((b) => b.text || "").join("").trim();
+      if (!text) throw new Error("Empty response.");
+      setResult(text);
+    } catch (e) {
+      setError("Error: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const chip = (active) => ({
+    fontSize: 12,
+    padding: "5px 12px",
+    borderRadius: 20,
+    border: active
+      ? "1.5px solid #1D9E75"
+      : "0.5px solid var(--color-border-secondary)",
+    background: active ? "#e8f7f2" : "var(--color-background-secondary)",
+    color: active ? "#1D9E75" : "var(--color-text-secondary)",
+    cursor: "pointer",
+    fontWeight: active ? 500 : 400,
+    transition: "all 0.15s",
+  });
+
+  return (
+    <div style={{ maxWidth: 620, padding: "1.5rem 0", fontFamily: "var(--font-sans, sans-serif)" }}>
+      <h2 style={{ fontSize: 20, fontWeight: 500, margin: "0 0 4px", color: "var(--color-text-primary)", display: "flex", alignItems: "center", gap: 8 }}>
+        🌿 Meal Makeover
+      </h2>
+      <p style={{ fontSize: 14, color: "var(--color-text-secondary)", margin: "0 0 1.5rem" }}>
+        Enter any meal and get a blood-sugar-friendly version that keeps the flavors you love.
+      </p>
+
+      {/* Examples */}
+      <p style={{ fontSize: 11, fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-tertiary)", margin: "0 0 8px" }}>
+        Try an example
+      </p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: "1.25rem" }}>
+        {EXAMPLES.map((ex) => (
+          <span key={ex} onClick={() => setMeal(ex)} style={chip(meal === ex)}>
+            {ex}
+          </span>
+        ))}
+      </div>
+
+      {/* Meal input */}
+      <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 6 }}>
+        Describe your meal
+      </label>
+      <textarea
+        value={meal}
+        onChange={(e) => setMeal(e.target.value)}
+        placeholder="e.g. Chicken and white rice with teriyaki sauce..."
+        rows={3}
+        style={{ width: "100%", boxSizing: "border-box", fontSize: 15, borderRadius: 8, border: "0.5px solid var(--color-border-secondary)", padding: "10px 12px", fontFamily: "inherit", color: "var(--color-text-primary)", background: "var(--color-background-primary)", resize: "vertical", marginBottom: "1.25rem" }}
+      />
+
+      {/* Dietary restrictions */}
+      <p style={{ fontSize: 11, fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text-tertiary)", margin: "0 0 8px" }}>
+        Dietary restrictions <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(optional)</span>
+      </p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: "1.25rem" }}>
+        {RESTRICTIONS.map((r) => (
+          <span
+            key={r.id}
+            onClick={() => toggleRestriction(r.id)}
+            style={chip(selected.includes(r.id))}
+          >
+            {r.label}
+          </span>
+        ))}
+      </div>
+
+      <button
+        onClick={getMakeover}
+        disabled={loading}
+        style={{ padding: "10px 22px", fontSize: 14, fontWeight: 500, borderRadius: 8, border: "0.5px solid var(--color-border-secondary)", background: "var(--color-background-primary)", color: "var(--color-text-primary)", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.5 : 1 }}
+      >
+        {loading ? "Working on it…" : "✨ Get my meal makeover ↗"}
+      </button>
+
+      {error && (
+        <div style={{ marginTop: 10, padding: "10px 14px", borderRadius: 8, background: "#fff0f0", border: "0.5px solid #ffcccc", fontSize: 13, color: "#c0392b" }}>
+          {error}
+        </div>
+      )}
+
+      {loading && (
+        <div style={{ marginTop: "1.25rem", padding: "1.25rem", borderRadius: 12, border: "0.5px solid var(--color-border-tertiary)", background: "var(--color-background-primary)", fontSize: 14, color: "var(--color-text-secondary)" }}>
+          Thinking up your makeover…
+        </div>
+      )}
+
+      {result && (
+        <div style={{ marginTop: "1.25rem", padding: "1.25rem", borderRadius: 12, border: "0.5px solid var(--color-border-tertiary)", background: "var(--color-background-primary)" }}>
+          <p style={{ fontSize: 14, fontWeight: 500, color: "var(--color-text-secondary)", margin: "0 0 10px", display: "flex", alignItems: "center", gap: 7 }}>
+            💚 Your blood-sugar-friendly version
+          </p>
+          <p style={{ fontSize: 14, color: "var(--color-text-primary)", lineHeight: 1.75, whiteSpace: "pre-wrap", margin: 0 }}>
+            {result}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
